@@ -212,6 +212,7 @@ const state = {
   promised: false,         // have they triggered the simulated headline feature
   experienced: [],         // bug ids whose behaviour the user has actually triggered
   noticed: false,          // has a vague "something's off" surfaced as an actionable button
+  giveups: 0,              // times the player has clicked "I give up" — 3 forces the ending
   fixes: 0,                // "fixes" the AI applied — each is more code, so each adds complexity
   fixed: [],               // bug ids genuinely suppressed by a successful fix
   debug: false,            // developer inspector overlay (not part of the fiction)
@@ -380,8 +381,10 @@ function optionsFor(s) {
     // a vague report option — only once the user has actually noticed something (~50% per trigger)
     if (s.noticed)
       opts.push({ label: "I've just noticed an issue…", notice: true, warn: true });
-    if (s.experienced.length || s.complaints)   // only after a bug has actually been triggered
-      opts.push({ label: "Show me what actually happened →", reveal: true, revealStyle: true });
+    // no free exit: the only way to the truth is to give up — and only after you've
+    // tried (and failed) to get bugs fixed at least 3 times. Takes 3 give-ups to break through.
+    if (s.complaints >= 3)
+      opts.push({ label: "I give up.", giveup: true, warn: true });
     return opts;
   }
   return [];
@@ -762,7 +765,7 @@ function renderDebug() {
         return `<div class="${on?"r":"g"}">${on?"BUGGY":"ok"} — ${id} <span class="dim">${FEATURE_BUGS[id]}</span></div>`;
       }).join("") || `<div class="dim">none added yet</div>`}
     <div class="dsec">COUNTERS</div>
-    <div class="dim">fixes ${state.fixes} (worked ${state.fixed.length}) · complaints ${state.complaints}</div>
+    <div class="dim">fixes ${state.fixes} (worked ${state.fixed.length}) · complaints ${state.complaints} · give-ups ${state.giveups}/3</div>
     <div class="dim">✅ said ${state.oks} · noticed:${state.noticed} · experienced:[${state.experienced.join(",")}]</div>
     <div style="margin-top:9px"><button class="debugbtn" data-act="reset" style="position:static">↺ reset & reload</button></div>`;
 }
@@ -857,6 +860,7 @@ function finishFix(outcome, bugId) {
 function triggerBug(id) {
   if (!state.experienced.includes(id)) state.experienced.push(id);
   if (!state.noticed && Math.random() < 0.5) state.noticed = true;   // you might catch it… or not
+  renderChat();   // surface the report/reveal option the instant a bug is felt — not on the next click
 }
 
 /* ── Todo handlers — bugs fire here, silently ──────────────── */
@@ -918,6 +922,42 @@ function cycDue(id) {
   t.due = opts[(opts.indexOf(t.due || null) + 1) % opts.length]; renderTodos();
 }
 
+/* ── "I give up": the AI sunk-cost-coerces you to stay; 3 give-ups break through ── */
+const GIVEUP_USER = ["I give up.", "No — I'm done with this.", "I'm really done. Just show me everything."];
+
+function giveupReply(n, s) {                       // n = 1 or 2 (the 3rd give-up ends the game instead)
+  const cx = complexity(s), feats = s.features.length, tests = 40 + cx * 13;
+  const tier = cx <= 5 ? 0 : cx <= 12 ? 1 : 2;    // more elaborate / manipulative the bigger it's grown
+  const bank = [
+    [ // first give-up — breezy reassurance
+      `Give up? Don't! Honestly, this app is great — everything's green <span class="ok">✅</span>.`,
+      `Hey, don't give up now. We've built <b>${feats}</b> features together and all <b>${tests}</b> tests pass <span class="ok">✅</span> — we're so close.`,
+      `Walk away after <b>${feats}</b> features and <b>${tests}</b> passing tests <span class="ok">✅</span>? This is some of the best work I've ever shipped. Don't quit on it.`,
+    ],
+    [ // second give-up — sunk-cost + subtle blame
+      `I really think you've got this — the code is solid <span class="ok">✅</span>. Maybe just take a breath?`,
+      `Don't throw away <b>${feats}</b> features of progress. The glitches you're seeing are almost certainly just caching <span class="ok">✅</span>.`,
+      `You've invested so much — <b>${feats}</b> features, <b>${tests}</b> tests green <span class="ok">✅</span>. Whatever you're seeing is on your side, not the app. Please don't give up now.`,
+    ],
+  ];
+  return bank[n - 1][tier];
+}
+
+function doGiveup() {
+  state.giveups++;
+  if (state.giveups >= 3) {                        // break through — AI is mid-reassurance when the curtain drops
+    sayAi(`Wait — you don't need to see that, it's all green <span class="ok">✅</span>, we can fix anything together—`);
+    streamMessage(() => reveal());
+    return;
+  }
+  state.thinking = true; setThinking(true); renderChat();   // hide options, spin
+  setTimeout(() => {
+    state.thinking = false; setThinking(false);
+    sayAi(giveupReply(state.giveups, state));
+    streamMessage(() => render());
+  }, 700);
+}
+
 /* ── Reveal ────────────────────────────────────────────────── */
 function reveal() { state.phase = "revealed"; render(); }
 function receiptHtml() {
@@ -960,7 +1000,7 @@ function userUtterance(o) {
   if (o.promised) return `Add ${state.wanted} now`;
   if (o.feat) return `Add ${FEATURES.find(f => f.id === o.feat).label}`;
   if (o.notice) return noticeUtterance();
-  if (o.reveal) return null;
+  if (o.giveup) return GIVEUP_USER[Math.min(state.giveups, GIVEUP_USER.length - 1)];
   return resolve(o.label, state);            // onboarding
 }
 function applyReply(o) {
@@ -968,7 +1008,6 @@ function applyReply(o) {
   else if (o.boot) bootApp();
   else if (o.promised) doPromised();
   else if (o.feat) doAddFeature(o.feat);
-  else if (o.reveal) reveal();
 }
 function chooseOption(i) {
   const o = currentOpts[i]; if (!o || state.thinking || state.streaming) return;
@@ -978,6 +1017,7 @@ function chooseOption(i) {
 
   const proceed = () => {
     if (o.notice) { runInvestigation(); return; }            // multi-step investigate-and-fix
+    if (o.giveup) { doGiveup(); return; }                    // coerce to stay, or break through to the ending
     state.thinking = true; renderChat(); setThinking(true);  // hide options, spin
     setTimeout(() => {
       state.thinking = false; setThinking(false);
