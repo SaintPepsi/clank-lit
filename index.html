@@ -383,7 +383,6 @@ const wouldFire = (id) => {                                         // pure: arm
   return bugActive(id) && (b.fires ? b.fires(state) : true);
 };
 const bugHits   = (id) => { const w = wouldFire(id); if (w) triggerBug(id); return w; }; // ACTION layer: auto-felt
-const armedBugs = (s) => Object.keys(BUGS).filter(id => armed(s, id));
 const testsFor   = (id) => (FEATURES.find(f => f.id === id) || {}).tests || 18;
 const denialFor  = (n) => DENIALS[Math.min(n, DENIALS.length - 1)];
 const resolve    = (v, s) => (typeof v === "function" ? v(s) : v);
@@ -981,7 +980,7 @@ function receiptHtml() {
       else            { note = " — fine"; said = "—"; }
       return `<div class="row"><span style="${fixedOk?"color:var(--accent)":""}" class="${broke?"broke":""}">${b.label}${note}</span><span class="said">${said}</span></div>`;
     }).join("");
-  const broken = Object.keys(BUGS).filter(id => bugActive(id)).length;
+  const broken = Object.keys(BUGS).filter(id => bugActive(id)).length;  // bugActive() already excludes absent-feature bugs, so no pre-filter needed
   return `<div class="receipt">
     <h2>What actually happened</h2>
     <div class="row"><span>You came to build</span><span>${esc(state.wanted)}</span></div>
