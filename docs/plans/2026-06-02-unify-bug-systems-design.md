@@ -249,9 +249,16 @@ creative decision.
   fixed by `runInvestigation`/`markFixed`, suppressed by `bugActive`'s `fixed` guard, and
   listed in both the inspector (`renderDebug`) and the receipt (`receiptHtml`).
 
+## Resolved (follow-up)
+
+- **Tag-alignment bug is now on the registry** (`tagalign`, `feature:"tags"`, `arm:{type:'roll'}`).
+  The old per-tag `tagAlignChance` / `t.badTags` mechanism was removed. Model chosen: **all
+  chips drift when armed** (render gates on `bugActive("tagalign")`, felt via `bugHits` in
+  `tagAdd`) — consistent with how every other feature bug works. Every bug is now unified;
+  there are no off-registry exceptions.
+
 ## Open Questions
 
-- **Tag-alignment bug** (`tagAlignChance` / `t.badTags`): keep as a separate per-instance
-  visual roll (current behavior), or eventually express it as a registry bug with a
-  per-tag activation? Left out of this pass to avoid scope creep — still the one bug not
-  on the unified registry.
+- **Tag-alignment could later evolve** beyond the all-chips model: per-tag ("some crooked")
+  or dynamic ("wandering" — the crooked set re-rolls on each add/remove, maximally
+  gaslighting). Deferred; the registry entry can carry extra effect-shaping data later.
