@@ -239,10 +239,19 @@ creative decision.
   inline) under "When This Doesn't Apply: genuinely unique / positional behavior" — forcing
   sort/filter/dnd into one transform signature would be false sharing.
 
+## Resolved (implemented)
+
+- **Fixed bugs are terminal — confirmed.** A fixed bug never re-arms: `bugActive(id)`
+  short-circuits on `state.fixed.includes(id)`, and `rollBugs` never clears `fixed`. This
+  matches core-bug behavior and applies uniformly to feature bugs now.
+- **Feature bugs are fully in the lifecycle.** As shipped, a feature bug is armed by
+  `rollBugs`, felt via `bugHits` in its action handler, reported through `noticeUtterance`,
+  fixed by `runInvestigation`/`markFixed`, suppressed by `bugActive`'s `fixed` guard, and
+  listed in both the inspector (`renderDebug`) and the receipt (`receiptHtml`).
+
 ## Open Questions
 
 - **Tag-alignment bug** (`tagAlignChance` / `t.badTags`): keep as a separate per-instance
   visual roll (current behavior), or eventually express it as a registry bug with a
-  per-tag activation? Left out of this pass to avoid scope creep.
-- Should feature bugs that are *fixed* be eligible to re-arm on a later `rollBugs`? Current
-  design: no — `fixed` is terminal (matches core-bug behavior). Confirm during implementation.
+  per-tag activation? Left out of this pass to avoid scope creep — still the one bug not
+  on the unified registry.
