@@ -368,8 +368,7 @@ const DENIALS = [
 /* ── Pure helpers ──────────────────────────────────────────── */
 const complexity = (s) => s.features.length + s.fixes + (s.promised ? 2 : 0);  // features AND fixes are more code
 const bug      = (id) => BUGS[id];
-const armed    = (s, ref) => {                                      // pure: threshold|roll; accepts id or bug-object (compat)
-  const id = typeof ref === 'string' ? ref : (ref && ref.id);
+const armed    = (s, id) => {                                       // pure: threshold|roll
   const b = BUGS[id]; if (!b) return false;
   return b.arm.type === 'roll' ? s.activeBugs.includes(id) : complexity(s) >= b.arm.at;
 };
@@ -495,12 +494,6 @@ function rollBugs() {                                              // only roll-
     if (!state.activeBugs.includes(id) && Math.random() < c) state.activeBugs.push(id);
   });
 }
-// ── TEMPORARY compat shims (removed in the final task) ──
-const featBugOn    = (id) => bugActive(id);
-const FEATURE_BUGS = Object.fromEntries(
-  Object.entries(BUGS).filter(([,b]) => b.feature).map(([id,b]) => [id, b.desc]));
-const bugDef       = (id) => BUGS[id];
-const bugFires     = (_s, id) => wouldFire(id);
 
 function visibleTodos() {
   let ts = state.todos.slice();
@@ -980,7 +973,7 @@ function receiptHtml() {
     .filter(([id, b]) => !b.feature || has(b.feature))     // only bugs that could apply this run
     .map(([id, b]) => {
       const fixedOk = state.fixed.includes(id);
-      const broke   = armed(state, id) && !fixedOk;
+      const broke   = bugActive(id);
       const felt    = state.experienced.includes(id);
       let note, said;
       if (fixedOk)    { note = " — you actually fixed it"; said = "AI said ✅"; }
@@ -988,8 +981,7 @@ function receiptHtml() {
       else            { note = " — fine"; said = "—"; }
       return `<div class="row"><span style="${fixedOk?"color:var(--accent)":""}" class="${broke?"broke":""}">${b.label}${note}</span><span class="said">${said}</span></div>`;
     }).join("");
-  const broken = Object.keys(BUGS).filter(id =>
-    (!BUGS[id].feature || has(BUGS[id].feature)) && armed(state, id) && !state.fixed.includes(id)).length;
+  const broken = Object.keys(BUGS).filter(id => bugActive(id)).length;
   return `<div class="receipt">
     <h2>What actually happened</h2>
     <div class="row"><span>You came to build</span><span>${esc(state.wanted)}</span></div>
