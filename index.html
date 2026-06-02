@@ -761,11 +761,15 @@ function renderDebug() {
     const mark = added ? "✓ added" : unlocked ? "○ offered" : "✕ locked";
     return `<div class="${added ? "g" : unlocked ? "y" : "d"}">${mark} — ${f.label} <span class="dim">req${f.req} ${f.kind}</span></div>`;
   }).join("");
-  const bugs = Object.entries(BUGS).filter(([,b]) => b.arm.type === 'threshold').map(([id,b]) => {
-    const armd = armed(state, id), firing = bugFires(state, id);
+  const bugs = Object.entries(BUGS).map(([id, b]) => {
+    const armd = armed(state, id), firing = wouldFire(id);
     const felt = state.experienced.includes(id), fixd = state.fixed.includes(id);
-    const tags = [armd ? "armed" : "", firing ? "FIRING" : "", felt ? "felt" : "", fixd ? "fixed" : ""].filter(Boolean).join(" · ");
-    return `<div class="${fixd ? "g" : firing ? "r" : armd ? "y" : "d"}">${b.label} <span class="dim">at${b.arm.at} · fires@${id==="delete"?">3":id==="checkoff"?">5":"≥7"} todos</span><br>&nbsp;&nbsp;${tags || "dormant"}</div>`;
+    const gated = b.feature && !has(b.feature);
+    const armWhen = b.arm.type === 'roll' ? `roll · ${b.feature}` : `at${b.arm.at}`;
+    const tags = [armd?"armed":"", firing?"FIRING":"", felt?"felt":"", fixd?"fixed":"", gated?"(feature off)":""]
+      .filter(Boolean).join(" · ");
+    return `<div class="${fixd?"g":firing?"r":armd?"y":"d"}">${b.label}
+      <span class="dim">${armWhen}${b.fires?" · conditional":""}</span><br>&nbsp;&nbsp;${tags||"dormant"}</div>`;
   }).join("");
   el.innerHTML = `
     <div class="dhead">🐞 inspector <span class="dim">(\` to toggle)</span></div>
@@ -774,12 +778,7 @@ function renderDebug() {
     <div class="dim">phase ${state.phase} · todos ${state.todos.length}</div>
     <div class="dim">wanted: ${esc(state.wanted)}${state.promised ? " · SHIPPED(fake)" : ""}</div>
     <div class="dsec">FEATURES</div>${feats}
-    <div class="dsec">BUGS</div>${bugs}
-    <div class="dsec">FEATURE BUGS (roll on add · ${Math.round(Math.min(0.9, complexity(state)*0.05)*100)}% each)</div>${
-      Object.keys(FEATURE_BUGS).filter(id => state.features.includes(id)).map(id => {
-        const on = featBugOn(id);
-        return `<div class="${on?"r":"g"}">${on?"BUGGY":"ok"} — ${id} <span class="dim">${FEATURE_BUGS[id]}</span></div>`;
-      }).join("") || `<div class="dim">none added yet</div>`}
+    <div class="dsec">BUGS (roll chance ${Math.round(bugChance()*100)}% on add)</div>${bugs}
     <div class="dsec">COUNTERS</div>
     <div class="dim">fixes ${state.fixes} (worked ${state.fixed.length}) · complaints ${state.complaints} · give-ups ${state.giveups}/3</div>
     <div class="dim">✅ said ${state.oks} · noticed:${state.noticed} · experienced:[${state.experienced.join(",")}]</div>
