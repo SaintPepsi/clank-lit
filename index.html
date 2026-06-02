@@ -976,17 +976,20 @@ function doGiveup() {
 /* ── Reveal ────────────────────────────────────────────────── */
 function reveal() { state.phase = "revealed"; render(); }
 function receiptHtml() {
-  const rows = Object.entries(BUGS).filter(([,b]) => b.arm.type === 'threshold').map(([id,b]) => {
-    const fixedOk = state.fixed.includes(id);
-    const broke   = armed(state, id) && !fixedOk;
-    const felt    = state.experienced.includes(id);
-    let note, said;
-    if (fixedOk)    { note = " — you actually fixed it"; said = "AI said ✅"; }
-    else if (broke) { note = felt ? " — broke (you noticed)" : " — broke silently"; said = "AI said ✅"; }
-    else            { note = " — fine"; said = "—"; }
-    return `<div class="row"><span class="${broke?"broke":fixedOk?"":""}" style="${fixedOk?"color:var(--accent)":""}">${b.label}${note}</span><span class="said">${said}</span></div>`;
-  }).join("");
-  const broken = Object.entries(BUGS).filter(([id,b]) => b.arm.type === 'threshold' && armed(state, id) && !state.fixed.includes(id)).length;
+  const rows = Object.entries(BUGS)
+    .filter(([id, b]) => !b.feature || has(b.feature))     // only bugs that could apply this run
+    .map(([id, b]) => {
+      const fixedOk = state.fixed.includes(id);
+      const broke   = armed(state, id) && !fixedOk;
+      const felt    = state.experienced.includes(id);
+      let note, said;
+      if (fixedOk)    { note = " — you actually fixed it"; said = "AI said ✅"; }
+      else if (broke) { note = felt ? " — broke (you noticed)" : " — broke silently"; said = "AI said ✅"; }
+      else            { note = " — fine"; said = "—"; }
+      return `<div class="row"><span style="${fixedOk?"color:var(--accent)":""}" class="${broke?"broke":""}">${b.label}${note}</span><span class="said">${said}</span></div>`;
+    }).join("");
+  const broken = Object.keys(BUGS).filter(id =>
+    (!BUGS[id].feature || has(BUGS[id].feature)) && armed(state, id) && !state.fixed.includes(id)).length;
   return `<div class="receipt">
     <h2>What actually happened</h2>
     <div class="row"><span>You came to build</span><span>${esc(state.wanted)}</span></div>
@@ -1005,7 +1008,7 @@ function receiptHtml() {
 function setThinking(on){ const s=document.querySelector(".spark"); if(s) s.classList.toggle("thinking",on); }
 
 function noticeUtterance() {                    // randomly surface some of what they've experienced
-  const pool = state.experienced.map(id => bugDef(id).desc);
+  const pool = state.experienced.map(id => bug(id).desc);
   if (!pool.length) return "i think something's a bit off?";
   const shuffled = pool.slice().sort(() => Math.random() - 0.5);
   const k = 1 + Math.floor(Math.random() * shuffled.length);
