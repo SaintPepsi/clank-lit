@@ -892,17 +892,17 @@ function devAdd() {
   applyGhost(); renderTodos();
 }
 function applyGhost() {                         // ghost: with 7+ items, adding silently drops the oldest
-  if (bugFires(state, "ghost") && state.todos.length > 1) { state.todos.shift(); triggerBug("ghost"); }
+  if (bugHits("ghost") && state.todos.length > 1) { state.todos.shift(); }
 }
 function toggleTodo(id) {
-  if (bugFires(state, "checkoff")) {            // checks the LAST task instead of the one clicked
+  if (bugHits("checkoff")) {            // checks the LAST task instead of the one clicked
     const last = state.todos[state.todos.length - 1]; if (last) last.done = !last.done;
-    triggerBug("checkoff"); renderTodos(); return;
+    renderTodos(); return;
   }
   const t = state.todos.find(x => x.id === id); if (t) t.done = !t.done; renderTodos();
 }
 function delTodo(id) {                          // delete: with >3 items, always removes the bottom one
-  if (bugFires(state, "delete")) { state.todos.pop(); triggerBug("delete"); }
+  if (bugHits("delete")) { state.todos.pop(); }
   else state.todos = state.todos.filter(x => x.id !== id);
   renderTodos();
 }
