@@ -629,7 +629,7 @@ function reorder(dragId, targetId) {
   const ts = state.todos, di = ts.findIndex(t => t.id === dragId); if (di < 0) return;
   const [m] = ts.splice(di, 1);
   let ti = ts.findIndex(t => t.id === targetId);
-  if (featBugOn("dnd")) ti = Math.min(ts.length, ti + 1);     // BUG: lands one past the target
+  if (bugHits("dnd")) ti = Math.min(ts.length, ti + 1);     // BUG: lands one past the target
   ts.splice(ti, 0, m); renderApp();
 }
 function nestUnder(dragId, pid) {
@@ -639,14 +639,14 @@ function nestUnder(dragId, pid) {
 }
 
 /* ── Remaining real per-task + view handlers ───────────────── */
-function editNote(id){ const t=findTodo(id); if(!t)return; const v=prompt("Note:", t.note||""); if(v!==null){ t.note = featBugOn("notes") ? v.slice(0,8) : v; renderTodos(); } }  // BUG: truncates
+function editNote(id){ const t=findTodo(id); if(!t)return; const v=prompt("Note:", t.note||""); if(v!==null){ t.note = bugHits("notes") ? v.slice(0,8) : v; renderTodos(); } }  // BUG: truncates
 function cycRec(id){ const o=["","daily","weekly"]; const t=findTodo(id); if(!t)return; t.recurring=o[(o.indexOf(t.recurring||"")+1)%o.length]; renderTodos(); }
 function cycLabel(id){ const t=findTodo(id); if(!t)return; t.label=LABELS[(LABELS.indexOf(t.label)+1)%LABELS.length]; renderTodos(); }
-function cycAsg(id){ const t=findTodo(id); if(!t)return; const o=[null,...ROSTER]; t.assignee=o[(o.indexOf(t.assignee||null)+(featBugOn("assignees")?2:1))%o.length]; renderTodos(); }  // BUG: wrong person
+function cycAsg(id){ const t=findTodo(id); if(!t)return; const o=[null,...ROSTER]; t.assignee=o[(o.indexOf(t.assignee||null)+(bugHits("assignees")?2:1))%o.length]; renderTodos(); }  // BUG: wrong person
 function cycStatus(id){ const o=["todo","doing","done"]; const t=findTodo(id); if(!t)return; t.status=o[(o.indexOf(t.status||"todo")+1)%o.length]; t.done=(t.status==="done"); renderApp(); }
 function subAdd(id){ const t=findTodo(id); if(!t)return; const v=prompt("Sub-task:"); if(v){ t.children=t.children||[]; t.children.push({id:state.nextId++,text:v,done:false}); renderTodos(); } }
-function toggleSub(pid,cid){ const p=findTodo(pid); if(!p)return; const c=(p.children||[]).find(x=>x.id===cid); if(c)c.done=!c.done; if(featBugOn("subtasks"))p.done=true; renderTodos(); }  // BUG: marks parent done
-function delSub(pid,cid){ const p=findTodo(pid); if(!p)return; p.children = featBugOn("delnested") ? (p.children||[]).slice(1) : (p.children||[]).filter(x=>x.id!==cid); renderTodos(); }  // BUG: deletes a different one
+function toggleSub(pid,cid){ const p=findTodo(pid); if(!p)return; const c=(p.children||[]).find(x=>x.id===cid); if(c)c.done=!c.done; if(bugHits("subtasks"))p.done=true; renderTodos(); }  // BUG: marks parent done
+function delSub(pid,cid){ const p=findTodo(pid); if(!p)return; p.children = bugHits("delnested") ? (p.children||[]).slice(1) : (p.children||[]).filter(x=>x.id!==cid); renderTodos(); }  // BUG: deletes a different one
 function cycSort(){ const o=["manual","name","priority","due"]; state.sortBy=o[(o.indexOf(state.sortBy)+1)%o.length]; renderApp(); }
 function cycFilter(){ const o=[null,...TAGS.map(t=>t.label)]; state.filterTag=o[(o.indexOf(state.filterTag)+1)%o.length]; renderApp(); }
 function setView(mode){ state.groupMode = state.groupMode===mode ? "none" : mode; renderApp(); }
@@ -916,7 +916,7 @@ function tagAdd(id) {
   t.tags = t.tags || []; t.badTags = t.badTags || [];
   const avail = TAGS.filter(x => !t.tags.includes(x.label));
   if (avail.length) {
-    const lbl = (featBugOn("tags") ? pick(avail) : avail[0]).label;        // BUG: random tag
+    const lbl = (bugHits("tags") ? pick(avail) : avail[0]).label;        // BUG: random tag
     t.tags.push(lbl);
     if (Math.random() < tagAlignChance()) t.badTags.push(lbl);             // BUG: top-aligned chip
   }
@@ -929,10 +929,10 @@ function untag(id, lbl) {
 }
 function cycPrio(id) {
   const t = state.todos.find(x => x.id === id); if (!t) return;
-  t.priority = ((t.priority || 0) + (featBugOn("priority") ? 2 : 1)) % 4; renderTodos();   // BUG: skips a level
+  t.priority = ((t.priority || 0) + (bugHits("priority") ? 2 : 1)) % 4; renderTodos();   // BUG: skips a level
 }
 function cycDue(id) {
-  const opts = featBugOn("duedates") ? [null, "Tomorrow", "Next week"]      // BUG: can't land on Today
+  const opts = bugHits("duedates") ? [null, "Tomorrow", "Next week"]      // BUG: can't land on Today
     : [null, "Today", "Tomorrow", "Next week"];
   const t = state.todos.find(x => x.id === id); if (!t) return;
   t.due = opts[(opts.indexOf(t.due || null) + 1) % opts.length]; renderTodos();
