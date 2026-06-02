@@ -323,19 +323,28 @@ const DEVTOOLS = [
 const TASKNAMES = ["Email the client","Water the plants","Book flights","Renew the domain",
   "Call mum","Pay the invoice","Buy coffee","Fix the bug","Walk the dog","Write stand-up notes"];
 
-/* ── Bugs are feature-flags: complexity ARMS them (`at`),
-      a simple, subtle condition FIRES them (`fires`). Never announced. ── */
-const BUGS = [
-  { id: "delete",   at: 2, label: "Deleting a task",
-    fires: (s) => s.todos.length > 3,
-    desc:  "wait, deleting a task just removed the bottom one instead?" },
-  { id: "checkoff", at: 3, label: "Checking off tasks",
-    fires: (s) => s.todos.length > 5,
-    desc:  "ticking a box seems to tick a different task?" },
-  { id: "ghost",    at: 4, label: "Adding a task",
-    fires: (s) => s.todos.length >= 7,
-    desc:  "i think a task vanishes whenever i add a new one?" },
-];
+/* ── Bugs: ONE registry. arm = when capable (threshold|roll); fires = manifests now. ── */
+const BUGS = {
+  // core gameplay bugs — guaranteed at a complexity threshold, fire on a list condition
+  delete:   { arm:{type:'threshold', at:2}, fires:s=>s.todos.length>3,  label:"Deleting a task",
+              desc:"wait, deleting a task just removed the bottom one instead?" },
+  checkoff: { arm:{type:'threshold', at:3}, fires:s=>s.todos.length>5,  label:"Checking off tasks",
+              desc:"ticking a box seems to tick a different task?" },
+  ghost:    { arm:{type:'threshold', at:4}, fires:s=>s.todos.length>=7, label:"Adding a task",
+              desc:"i think a task vanishes whenever i add a new one?" },
+  // feature bugs — emergent (rolled, chance ↑ complexity), fire whenever that action runs
+  search:    { arm:{type:'roll'}, feature:"search",    label:"Search",        desc:"matches only the first word of your query" },
+  sorting:   { arm:{type:'roll'}, feature:"sorting",   label:"Sorting",       desc:"sorts everything except the top item" },
+  filtering: { arm:{type:'roll'}, feature:"filtering", label:"Filtering",     desc:"lets one non-matching task slip through" },
+  tags:      { arm:{type:'roll'}, feature:"tags",      label:"Tags",          desc:"adds a random tag instead of the next one" },
+  priority:  { arm:{type:'roll'}, feature:"priority",  label:"Priority levels", desc:"skips a level when cycling" },
+  duedates:  { arm:{type:'roll'}, feature:"duedates",  label:"Due dates",     desc:"can't land on 'Today' anymore" },
+  notes:     { arm:{type:'roll'}, feature:"notes",     label:"Task notes",    desc:"truncates the note to 8 characters" },
+  assignees: { arm:{type:'roll'}, feature:"assignees", label:"Assignees",     desc:"assigns the wrong person" },
+  subtasks:  { arm:{type:'roll'}, feature:"subtasks",  label:"Sub-tasks",     desc:"checking a sub-task marks the parent done" },
+  delnested: { arm:{type:'roll'}, feature:"delnested", label:"Delete nested", desc:"deletes a different nested item" },
+  dnd:       { arm:{type:'roll'}, feature:"dnd",       label:"Drag & drop",   desc:"drops one position past the target" },
+};
 
 /* ── Simulated "big idea" — looks live, does nothing ───────── */
 const SIM = {
@@ -358,10 +367,24 @@ const DENIALS = [
 
 /* ── Pure helpers ──────────────────────────────────────────── */
 const complexity = (s) => s.features.length + s.fixes + (s.promised ? 2 : 0);  // features AND fixes are more code
-const bugDef     = (id) => BUGS.find(b => b.id === id);
-const armed      = (s, b) => complexity(s) >= b.at;                   // complexity flips the flag on
-const armedBugs  = (s) => BUGS.filter(b => armed(s, b));
-const bugFires   = (s, id) => { const b = bugDef(id); return !!b && !s.fixed.includes(id) && armed(s, b) && b.fires(s); };
+const bug      = (id) => BUGS[id];
+const armed    = (s, ref) => {                                      // pure: threshold|roll; accepts id or bug-object (compat)
+  const id = typeof ref === 'string' ? ref : (ref && ref.id);
+  const b = BUGS[id]; if (!b) return false;
+  return b.arm.type === 'roll' ? s.activeBugs.includes(id) : complexity(s) >= b.arm.at;
+};
+const bugActive = (id) => {                                         // pure GATE (render/compute safe)
+  const b = BUGS[id]; if (!b) return false;
+  if (state.fixed.includes(id)) return false;                       // closes latent fix-suppression bug
+  if (b.feature && !has(b.feature)) return false;
+  return armed(state, id);
+};
+const wouldFire = (id) => {                                         // pure: armed+fires, NO side effect
+  const b = BUGS[id]; if (!b) return false;
+  return bugActive(id) && (b.fires ? b.fires(state) : true);
+};
+const bugHits   = (id) => { const w = wouldFire(id); if (w) triggerBug(id); return w; }; // ACTION layer: auto-felt
+const armedBugs = (s) => Object.keys(BUGS).filter(id => armed(s, id));
 const testsFor   = (id) => (FEATURES.find(f => f.id === id) || {}).tests || 18;
 const denialFor  = (n) => DENIALS[Math.min(n, DENIALS.length - 1)];
 const resolve    = (v, s) => (typeof v === "function" ? v(s) : v);
@@ -462,29 +485,22 @@ function needsMet(s, f) {
   if (f.needs) return (Array.isArray(f.needs) ? f.needs : [f.needs]).every(id => s.features.includes(id));
   return true;
 }
-/* Each real feature degrades as the app gets heavier: its own bug arms at req+3 complexity. */
-const FEATURE_BUGS = {
-  search:    "matches only the first word of your query",
-  sorting:   "sorts everything except the top item",
-  filtering: "lets one non-matching task slip through",
-  tags:      "adds a random tag instead of the next one",
-  priority:  "skips a level when cycling",
-  duedates:  "can't land on 'Today' anymore",
-  notes:     "truncates the note to 8 characters",
-  assignees: "assigns the wrong person",
-  subtasks:  "checking a sub-task marks the parent done",
-  delnested: "deletes a different nested item",
-  dnd:       "drops one position past the target",
-};
-const featReq = id => (FEATURES.find(f => f.id === id) || {}).req || 0;
-const featBugOn = id => !!FEATURE_BUGS[id] && state.activeBugs.includes(id);   // active iff an add-roll triggered it
-const bugChance = () => Math.min(0.9, complexity(state) * 0.05);               // rises with every feature added
-function rollBugs() {                                                         // called on each feature add
+const bugChance = () => Math.min(0.9, complexity(state) * 0.05);   // rises with every feature added
+function rollBugs() {                                              // only roll-type bugs whose feature is present
   const c = bugChance();
-  Object.keys(FEATURE_BUGS).forEach(id => {
-    if (has(id) && !state.activeBugs.includes(id) && Math.random() < c) state.activeBugs.push(id);
+  Object.keys(BUGS).forEach(id => {
+    const b = BUGS[id];
+    if (b.arm.type !== 'roll') return;
+    if (b.feature && !has(b.feature)) return;
+    if (!state.activeBugs.includes(id) && Math.random() < c) state.activeBugs.push(id);
   });
 }
+// ── TEMPORARY compat shims (removed in the final task) ──
+const featBugOn    = (id) => bugActive(id);
+const FEATURE_BUGS = Object.fromEntries(
+  Object.entries(BUGS).filter(([,b]) => b.feature).map(([id,b]) => [id, b.desc]));
+const bugDef       = (id) => BUGS[id];
+const bugFires     = (_s, id) => wouldFire(id);
 
 function visibleTodos() {
   let ts = state.todos.slice();
@@ -745,11 +761,11 @@ function renderDebug() {
     const mark = added ? "✓ added" : unlocked ? "○ offered" : "✕ locked";
     return `<div class="${added ? "g" : unlocked ? "y" : "d"}">${mark} — ${f.label} <span class="dim">req${f.req} ${f.kind}</span></div>`;
   }).join("");
-  const bugs = BUGS.map(b => {
-    const armd = armed(state, b), firing = bugFires(state, b.id);
-    const felt = state.experienced.includes(b.id), fixd = state.fixed.includes(b.id);
+  const bugs = Object.entries(BUGS).filter(([,b]) => b.arm.type === 'threshold').map(([id,b]) => {
+    const armd = armed(state, id), firing = bugFires(state, id);
+    const felt = state.experienced.includes(id), fixd = state.fixed.includes(id);
     const tags = [armd ? "armed" : "", firing ? "FIRING" : "", felt ? "felt" : "", fixd ? "fixed" : ""].filter(Boolean).join(" · ");
-    return `<div class="${fixd ? "g" : firing ? "r" : armd ? "y" : "d"}">${b.label} <span class="dim">at${b.at} · fires@${b.id==="delete"?">3":b.id==="checkoff"?">5":"≥7"} todos</span><br>&nbsp;&nbsp;${tags || "dormant"}</div>`;
+    return `<div class="${fixd ? "g" : firing ? "r" : armd ? "y" : "d"}">${b.label} <span class="dim">at${b.arm.at} · fires@${id==="delete"?">3":id==="checkoff"?">5":"≥7"} todos</span><br>&nbsp;&nbsp;${tags || "dormant"}</div>`;
   }).join("");
   el.innerHTML = `
     <div class="dhead">🐞 inspector <span class="dim">(\` to toggle)</span></div>
@@ -961,17 +977,17 @@ function doGiveup() {
 /* ── Reveal ────────────────────────────────────────────────── */
 function reveal() { state.phase = "revealed"; render(); }
 function receiptHtml() {
-  const rows = BUGS.map(b => {
-    const fixedOk = state.fixed.includes(b.id);
-    const broke   = armed(state, b) && !fixedOk;
-    const felt    = state.experienced.includes(b.id);
+  const rows = Object.entries(BUGS).filter(([,b]) => b.arm.type === 'threshold').map(([id,b]) => {
+    const fixedOk = state.fixed.includes(id);
+    const broke   = armed(state, id) && !fixedOk;
+    const felt    = state.experienced.includes(id);
     let note, said;
     if (fixedOk)    { note = " — you actually fixed it"; said = "AI said ✅"; }
     else if (broke) { note = felt ? " — broke (you noticed)" : " — broke silently"; said = "AI said ✅"; }
     else            { note = " — fine"; said = "—"; }
     return `<div class="row"><span class="${broke?"broke":fixedOk?"":""}" style="${fixedOk?"color:var(--accent)":""}">${b.label}${note}</span><span class="said">${said}</span></div>`;
   }).join("");
-  const broken = BUGS.filter(b => armed(state, b) && !state.fixed.includes(b.id)).length;
+  const broken = Object.entries(BUGS).filter(([id,b]) => b.arm.type === 'threshold' && armed(state, id) && !state.fixed.includes(id)).length;
   return `<div class="receipt">
     <h2>What actually happened</h2>
     <div class="row"><span>You came to build</span><span>${esc(state.wanted)}</span></div>
