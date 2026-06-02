@@ -506,18 +506,18 @@ function visibleTodos() {
   let ts = state.todos.slice();
   if (state.q) {
     let q = state.q.toLowerCase();
-    if (featBugOn("search")) q = (q.trim().split(/\s+/)[0] || "");   // BUG: matches only the first word
+    if (bugActive("search")) q = (q.trim().split(/\s+/)[0] || "");   // BUG: matches only the first word
     ts = ts.filter(t => t.text.toLowerCase().includes(q));
   }
   if (state.filterTag) {
-    const slip = featBugOn("filtering") ? ts[0] : null;                     // BUG: one non-match slips through
+    const slip = bugActive("filtering") ? ts[0] : null;                     // BUG: one non-match slips through
     ts = ts.filter(t => t === slip || (t.tags || []).includes(state.filterTag));
   }
   if (state.sortBy !== "manual") {
     const cmp = state.sortBy === "name" ? (a,b) => a.text.localeCompare(b.text)
       : state.sortBy === "priority" ? (a,b) => (b.priority||0)-(a.priority||0)
       : (a,b) => { const o={Today:1,Tomorrow:2,"Next week":3}; return (o[a.due]||9)-(o[b.due]||9); };
-    if (featBugOn("sorting") && ts.length) { const head = ts[0]; ts = [head, ...ts.slice(1).sort(cmp)]; } // BUG: top stays put
+    if (bugActive("sorting") && ts.length) { const head = ts[0]; ts = [head, ...ts.slice(1).sort(cmp)]; } // BUG: top stays put
     else ts.sort(cmp);
   }
   return ts;
@@ -603,7 +603,7 @@ function renderApp() {                            // update toolbar + list (no c
 }
 function attachAppListeners() {
   const si = $("searchInput");
-  if (si) si.addEventListener("input", e => { state.q = e.target.value; renderTodos(); });
+  if (si) si.addEventListener("input", e => { state.q = e.target.value; if (state.q) bugHits("search"); renderTodos(); });
   attachDnd();
 }
 
@@ -647,8 +647,8 @@ function cycStatus(id){ const o=["todo","doing","done"]; const t=findTodo(id); i
 function subAdd(id){ const t=findTodo(id); if(!t)return; const v=prompt("Sub-task:"); if(v){ t.children=t.children||[]; t.children.push({id:state.nextId++,text:v,done:false}); renderTodos(); } }
 function toggleSub(pid,cid){ const p=findTodo(pid); if(!p)return; const c=(p.children||[]).find(x=>x.id===cid); if(c)c.done=!c.done; if(bugHits("subtasks"))p.done=true; renderTodos(); }  // BUG: marks parent done
 function delSub(pid,cid){ const p=findTodo(pid); if(!p)return; p.children = bugHits("delnested") ? (p.children||[]).slice(1) : (p.children||[]).filter(x=>x.id!==cid); renderTodos(); }  // BUG: deletes a different one
-function cycSort(){ const o=["manual","name","priority","due"]; state.sortBy=o[(o.indexOf(state.sortBy)+1)%o.length]; renderApp(); }
-function cycFilter(){ const o=[null,...TAGS.map(t=>t.label)]; state.filterTag=o[(o.indexOf(state.filterTag)+1)%o.length]; renderApp(); }
+function cycSort(){ const o=["manual","name","priority","due"]; state.sortBy=o[(o.indexOf(state.sortBy)+1)%o.length]; if (state.sortBy !== "manual") bugHits("sorting"); renderApp(); }
+function cycFilter(){ const o=[null,...TAGS.map(t=>t.label)]; state.filterTag=o[(o.indexOf(state.filterTag)+1)%o.length]; if (state.filterTag) bugHits("filtering"); renderApp(); }
 function setView(mode){ state.groupMode = state.groupMode===mode ? "none" : mode; renderApp(); }
 function toggleDark(){ state.dark=!state.dark; const c=$("appCard"); if(c)c.classList.toggle("light",state.dark); renderApp(); }
 
