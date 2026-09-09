@@ -1105,6 +1105,29 @@ document.addEventListener("mousemove", e => {
 document.addEventListener("mouseup", () => { _drag = null; });
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
+/* ── Cursor bridge: when embedded, hand mouse position to the host page ── */
+// A cross-origin parent can't see the pointer once it's over this frame. When we're
+// framed, hide our own cursor and post pointer events to the top window so the host
+// can keep drawing its cursor. Coordinates are relative to this frame's viewport.
+if (window.self !== window.top) {
+  const st = document.createElement("style");
+  st.textContent = "*, *::before, *::after { cursor: none !important; }";
+  document.head.appendChild(st);
+  const post = (kind, e) => {
+    const t = e && e.target instanceof Element ? e.target : null;
+    top.postMessage({
+      type: "pixel-cursor", kind,
+      x: e ? e.clientX : 0, y: e ? e.clientY : 0,
+      clickable: !!(t && t.closest("a, button, [role=button], input, select, textarea, label, .opt, .box")),
+      draggable: !!(t && t.closest("[draggable=true]")),
+    }, "*");
+  };
+  document.addEventListener("mousemove", e => post("move", e), { passive: true });
+  document.addEventListener("mousedown", e => post("down", e), { passive: true });
+  document.addEventListener("mouseup",   e => post("up", e),   { passive: true });
+  document.addEventListener("mouseleave", () => post("leave"));
+}
+
 /* ── Start: resume a saved session, else cold-open ─────────── */
 startWorld();                               // simulated teammates / reminders tick in the background
 if (load() && state.messages.length) {
